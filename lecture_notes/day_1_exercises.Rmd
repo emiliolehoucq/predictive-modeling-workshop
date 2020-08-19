@@ -1,0 +1,20 @@
+---
+title: "Day 1: Shrinkage Methods--Lasso and Ridge Regression (Exercises)"
+author: "Emilio Lehoucq"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+params:
+  notes: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message = FALSE, warning = FALSE)
+```
+
+# Question
+
+Fit a kitchen sink OLS model and tune Lasso and Ridge models through 10-fold cross validation to predict `order` in the clickstream data for online shopping Data Set. Which model fits the data best? Use a validation set approach.

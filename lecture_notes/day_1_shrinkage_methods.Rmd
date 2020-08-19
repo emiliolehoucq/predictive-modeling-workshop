@@ -1,0 +1,215 @@
+---
+title: "Day 1: Shrinkage Methods--Lasso and Ridge Regression"
+author: "Emilio Lehoucq"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+params:
+  notes: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message = FALSE, warning = FALSE)
+```
+
+# Packages
+
+```{r}
+library(tidyverse)
+library(janitor) # clean_names
+library(robustHD) # standardize
+library(skimr) # descriptive statistics
+library(ggcorrplot) # correlation matrix
+library(caret) # cross validation
+library(glmnet) # shrinkage methods
+library(glmnetUtils) # improves glmnet
+```
+
+# Data
+
+```{r}
+set.seed(1) # this is what we're going to use every time there is randomization
+
+factors <- c("data_channel_is_lifestyle", "data_channel_is_entertainment", "data_channel_is_bus", 
+             "data_channel_is_socmed", "data_channel_is_tech", "data_channel_is_world", 
+             "weekday_is_monday", "weekday_is_tuesday", "weekday_is_wednesday", 
+             "weekday_is_thursday", "weekday_is_friday", "weekday_is_saturday",
+             "weekday_is_sunday", "is_weekend") # all factors in the dataset
+
+news <- read_csv(here::here("data/OnlineNewsPopularity.csv")) %>% 
+  sample_n(., 1500) %>% # we're only going to use 1,500 observations to run models faster during the sessions
+  clean_names() %>% # to have all column names lower case letters
+  select(-c(url, lda_00:lda_04)) %>% # we don't want this predictors
+  mutate_each_(funs(factor(.)), factors) %>% # converting to factors --check: sapply(news, class)
+  mutate(log_shares = log(shares)) %>% # taking the log of our response
+  select(-shares) %>%  # droping the original response
+  mutate_if(is.numeric, funs(standardize(.))) # standardizing numeric variables
+
+```
+
+We're going to split the dataset into two for tuning and validation.
+
+```{r}
+set.seed(1)
+
+news_train <- news %>% sample_frac(0.7)
+news_test <- news %>% setdiff(news_train)
+```
+
+# Exploratory data analysis
+
+Let's first take a look at some descriptives.
+
+```{r}
+skim(news_train)
+```
+
+Two noticeable things for us:
+- there are no missing values
+- our response (log_shares) seems reasonably close to a Normal distribution
+
+We could do a correlation matrix, why not?
+
+```{r}
+corr <- round(cor(news_train %>%select_if(is.numeric)), 1)
+
+ggcorrplot(corr, lab = FALSE)
+```
+
+Ah! Not super useful. And we only havem 41 numeric predictors...
+
+Of course, there are many other things you should do in an exploratory data analysis. We're just going to skip that here. We'll focus on the models and rely on them for variable selection.
+
+# OLS regression
+
+Let's try a kitchen sink OLS. We'll compare the performance of our shrinkage models with it.
+
+```{r}
+kitchen_sink <- lm(log_shares ~ ., news_train)
+  
+summary(kitchen_sink)
+```
+
+Well, we're not getting a lot of traction to decide on news articles' postings... Let's see if we can do better.
+
+What problems could this model have?
+- multicollinearity
+- variable selection
+- non-linearities
+
+# Ridge regression
+
+We're going to use 10-fold cross validation to tune the model.
+
+Ideally, you could do several iterations of k-fold cross validation, since each will have different results, since it involves randomization.
+
+```{r}
+set.seed(1)
+
+lambda_grid <- 10^seq(-2, 10, length = 200)
+
+ridge_cv <- cv.glmnet(formula = log_shares ~ ., 
+                      data = news_train, 
+                      alpha = 0, # Ridge!
+                      nfolds = 10,
+                      lambda = lambda_grid
+    )
+```
+
+Let's make sure we tuned the model correctly.
+
+```{r}
+plot(ridge_cv)
+```
+
+Two conventional options for the "best" model:
+
+```{r}
+ridge_lambda_min <- ridge_cv$lambda.min
+ridge_lambda_1se <- ridge_cv$lambda.1se
+
+ridge_min <- glmnet(log_shares ~ ., data = news_train, alpha = 0, lambda = ridge_lambda_min)
+ridge_1se <- glmnet(log_shares ~ ., data = news_train, alpha = 0, lambda = ridge_lambda_1se)
+
+coef(ridge_min)
+```
+
+```{r}
+cbind(ridge_min$dev.ratio, ridge_1se$dev.ratio)
+```
+
+Ridge regression does seem to improve over OLS.
+
+# Lasso regression
+
+Again, we're using 10-fold cross validation.
+
+```{r}
+set.seed(1)
+
+lasso_cv <- cv.glmnet(formula = log_shares ~ ., 
+                      data = news_train, 
+                      alpha = 1, # Lasso! 
+                      nfolds = 10,
+                      lambda = lambda_grid
+    )
+```
+
+Let's make sure we tuned the model correctly.
+
+```{r}
+plot(lasso_cv)
+```
+
+Two conventional options for the "best" model:
+
+```{r}
+lasso_lambda_min <- lasso_cv$lambda.min
+lasso_lambda_1se <- lasso_cv$lambda.1se
+
+lasso_min <- glmnet(log_shares ~ ., data = news_train, alpha = 1, lambda = lasso_lambda_min)
+lasso_1se <- glmnet(log_shares ~ ., data = news_train, alpha = 1, lambda = lasso_lambda_1se)
+
+coef(lasso_min)
+```
+
+It performs variable selection. That's useful.
+
+```{r}
+cbind(lasso_min$dev.ratio, lasso_1se$dev.ratio)
+```
+
+Lasso regression does seem to improve over both OLS and Ridge regressions.
+
+# Model validation
+
+Remember our test data? Time to use it.
+
+## OLS regression
+
+```{r}
+kitchen_sink_test <- lm(log_shares ~ ., news_test)
+  
+summary(kitchen_sink_test)
+```
+
+## Ridge regression
+
+```{r}
+ridge_min_test <- glmnet(log_shares ~ ., data = news_test, alpha = 0, lambda = ridge_lambda_min)
+ridge_1se_test <- glmnet(log_shares ~ ., data = news_test, alpha = 0, lambda = ridge_lambda_1se)
+cbind(ridge_min_test$dev.ratio, ridge_1se_test$dev.ratio)
+```
+
+## Lasso regression
+
+```{r}
+lasso_min_test <- glmnet(log_shares ~ ., data = news_test, alpha = 1, lambda = lasso_lambda_min)
+lasso_1se_test <- glmnet(log_shares ~ ., data = news_test, alpha = 1, lambda = lasso_lambda_1se)
+cbind(lasso_min_test$dev.ratio, lasso_1se_test$dev.ratio)
+```
+
+OLS regression is actually the one that performs best on the test data, followed by Lasso, and Ridge last.
