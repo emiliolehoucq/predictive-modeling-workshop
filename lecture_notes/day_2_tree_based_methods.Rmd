@@ -20,8 +20,6 @@ knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message 
 ```{r}
 library(tidyverse)
 library(janitor) # clean_names
-library(skimr) # descriptive statistics
-library(ggcorrplot) # correlation matrix
 library(ranger) # random forests
 library(vip) # variable importance plot
 library(pdp) # partial dependence plot
@@ -31,7 +29,7 @@ library(xgboost) # boosted trees
 # Data
 
 ```{r}
-set.seed(1) # this is what we're going to use every time there is randomization
+set.seed(1) 
 
 factors <- c("data_channel_is_lifestyle", "data_channel_is_entertainment", "data_channel_is_bus", 
              "data_channel_is_socmed", "data_channel_is_tech", "data_channel_is_world", 
@@ -40,10 +38,10 @@ factors <- c("data_channel_is_lifestyle", "data_channel_is_entertainment", "data
              "weekday_is_sunday", "is_weekend") # all factors in the dataset
 
 news <- read_csv(here::here("data/OnlineNewsPopularity.csv")) %>% 
-  sample_n(., 1500) %>% # we're only going to use 1,500 observations to run models faster during the sessions
-  clean_names() %>% # to have all column names lower case letters
-  select(-c(url, lda_00:lda_04)) %>% # we don't want this predictors
-  mutate_each_(funs(factor(.)), factors) # converting to factors --check: sapply(news, class)
+  sample_n(., 1500) %>% 
+  clean_names() %>% 
+  select(-c(url, lda_00:lda_04)) %>% 
+  mutate_each_(funs(factor(.)), factors) 
 ```
 
 We're going to split the dataset into two for tuning and validation (and divide the tuning data into two for a validation set approach). This is not the best approach for these data, but we're doing it for instructional purposes.

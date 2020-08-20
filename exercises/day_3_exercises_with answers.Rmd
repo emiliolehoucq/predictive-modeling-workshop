@@ -1,0 +1,154 @@
+---
+title: "Day 3: Single-layered neural networks (Exercises with answers)"
+author: "Emilio Lehoucq"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+params:
+  notes: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message = FALSE, warning = FALSE)
+```
+
+# Question
+
+Fit a single-layered neural network through 2 repeats of 3-fold cross validation to predict `order` in the clickstream data for online shopping Data Set. Which model fits the data best? Use a validation set approach. Also, visualize the marginal relation between `day` and the response with an ALE plot.
+
+# Answer
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(janitor) # clean_names
+library(robustHD) # standardize
+library(nnet) # neural networks
+library(caret) # cross validation
+library(ALEPlot) # ALE plot
+```
+
+## Data
+
+```{r}
+set.seed(1) 
+
+factors <- c("country", "page_1_main_category", "colour", 
+             "location", "model_photography", "price_2", "page")
+
+eshop <- read_delim(here::here("data/e-shop clothing 2008.csv"), delim = ";") %>% 
+  sample_n(1500) %>% 
+  clean_names() %>% 
+  select(-c(`session_id`, `page_2_clothing_model`, year)) %>% 
+  mutate_each_(funs(factor(.)), factors) %>% 
+  mutate_if(is.numeric, funs(standardize(.)))
+```
+
+We're going to split the dataset into two for tuning and validation.
+
+```{r}
+set.seed(1)
+
+eshop_train <- eshop %>% sample_frac(0.7)
+eshop_test <- eshop %>% setdiff(eshop_train)
+```
+
+## Single-layered neural network
+
+For loops are slow and force you to write more code to search over a space of tuning parameters. The implementation in `caret` helps with this:
+
+```{r, echo=TRUE}
+set.seed(1)
+
+folds <- createFolds(eshop_train$order, k = 3, list = FALSE)
+
+training <- eshop_train[ folds,]
+
+testing  <- eshop_train[-folds,]
+
+train_control <- trainControl(method = "repeatedcv",
+                           number = 3,
+                           repeats = 2)
+
+nn <- train(order ~ ., data = training, 
+            method = "nnet", 
+            trControl = train_control,
+            verbose = FALSE,
+            trace = FALSE,
+            tuneGrid = expand.grid(decay = c(0.1, 0.5, 1, 1.5), size = c(1, 5, 10, 15, 19)))
+```
+
+Let's check our tuning:
+
+```{r}
+trellis.par.set(caretTheme())
+ggplot(nn)  
+```
+
+We might be tempted to add more units, but they'd be too many for the data we have (there's actually an error message) and the test error is actually stabilizing--not changing meaningfully.
+
+It seems that the "best" single-layered neural network is the one with 19 units and decay parameter of 0.1. To avoid overfitting, let's pick the one with 15 units, though.
+
+## ALE plot
+
+Accumulated local effects plots are an alternative to partial dependence plots (you can read Daniel Apley's article about them, cited in the documentation of `ALEPlot`). You can also use partial dependence plots with `nnet`, though, if you prefer.
+
+```{r, echo=TRUE}
+nn_best <- nnet(order~.,eshop_train, linout=T, size=15, decay=0.1, maxit=1000, trace=F)
+
+yhatf <- function(X.model, newdata) as.numeric(predict(X.model, newdata))
+
+invisible(ALEPlot(as.data.frame(eshop_train), nn_best, pred.fun=yhatf, J=2, K=50, NA.plot = TRUE))
+rug(pull(eshop_train))
+```
+
+I chose this predictor because it was selected as the most important by tree-based methods. Neural networks don't do variable selection. One way to get at this is doing several ALE plots (you can use a for loop) and seeing the range of the response over which predictors vary. The larger the range, the most important the predictor is.
+
+While there are some non-linearities, probably a linear fit is okay. Given this, it makes sense that linear methods perform best on these data--while they are less flexible (which doesn't seem to be needed), they are also less complex (and thus prone to overfitting).
+
+## Model validation
+
+A little helper function to get the $R^2$:
+
+```{r}
+# helper function
+#' @name r2
+#' @param model nnet object
+#' @param test test data
+#' @param outcome string with the response
+#' @returns test R2
+r2<- function(model, test, outcome){
+  
+  preds <- predict(model, test)
+  
+  sse <- sum((test[[outcome]] - preds)^2)
+  sst <- sum((test[[outcome]] - mean(test[[outcome]]))^2)
+  r2 <- 1 - sse / sst
+  
+  return(r2)
+  
+}
+```
+
+```{r}
+r2(nn_best, eshop_test, "order")
+```
+
+Terrible! Makes sense given what we discussed yesterday and the ALE plot above.
+
+Remember the $R^2s$ from yesterday:
+
+| Model            | Test R2 |
+|------------------|---------|
+| Kitchen sink OLS | 0.17    |
+| Ridge            | 0.14    |
+| Lasso            | 0.13    |
+| Random forests   | 0.03    |
+| Boosted trees    | -0.06   |
+| Neural network   | -0.97   |
+
+Again, linear models perform best on these data. There's no need for more flexibility/complexity.

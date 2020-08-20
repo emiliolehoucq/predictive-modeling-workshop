@@ -36,7 +36,7 @@ library(glmnetUtils) # improves glmnet
 ## Data
 
 ```{r}
-set.seed(1) # this is what we're going to use every time there is randomization
+set.seed(1) 
 
 factors <- c("country", "page_1_main_category", "colour", 
              "location", "model_photography", "price_2", "page")

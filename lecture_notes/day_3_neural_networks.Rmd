@@ -1,0 +1,244 @@
+---
+title: "Day 3: Single-layered neural networks"
+author: "Emilio Lehoucq"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+params:
+  notes: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message = FALSE, warning = FALSE)
+```
+
+# Packages
+
+```{r}
+library(tidyverse)
+library(janitor) # clean_names
+library(robustHD) # standardize
+library(nnet) # neural networks
+library(caret) # cross validation
+library(ALEPlot) # ALE plot
+```
+
+# Data
+
+```{r}
+set.seed(1) # this is what we're going to use every time there is randomization
+
+factors <- c("data_channel_is_lifestyle", "data_channel_is_entertainment", "data_channel_is_bus", 
+             "data_channel_is_socmed", "data_channel_is_tech", "data_channel_is_world", 
+             "weekday_is_monday", "weekday_is_tuesday", "weekday_is_wednesday", 
+             "weekday_is_thursday", "weekday_is_friday", "weekday_is_saturday",
+             "weekday_is_sunday", "is_weekend") # all factors in the dataset
+
+news <- read_csv(here::here("data/OnlineNewsPopularity.csv")) %>% 
+  sample_n(., 1500) %>% # we're only going to use 1,500 observations to run models faster during the sessions
+  clean_names() %>% # to have all column names lower case letters
+  select(-c(url, lda_00:lda_04)) %>% # we don't want this predictors
+  mutate_each_(funs(factor(.)), factors) %>% # converting to factors --check: sapply(news, class)
+  mutate_if(is.numeric, funs(standardize(.))) # standardizing numeric variables
+
+```
+
+We're going to split the dataset into two for tuning and validation.
+
+```{r}
+set.seed(1)
+
+news_train <- news %>% sample_frac(0.7)
+news_test <- news %>% setdiff(news_train)
+```
+
+# Neural networks with more than one hidden layer
+
+Single-layered neural networks are useful for problems with low signal to noise ratio (which is the case in analytics problems--think about all the noise in the data we're using!). For problems with more complex signals (e.g., computer vision), more layers are needed. This session is focused on single-layered neural networks. `nnet` only allows for one hidden layer. If you're interested in neural networks with more hidden layers, I recommend Chollet, F. & Allaire, J.J. *Deep Learning with R*, which teaches you the methods and how to implement them with `keras`.
+
+# Single-layered neural networks
+
+## For loops implementation
+
+First, a helper function (adapted from Daniel Apley):
+
+```{r}
+# helper function
+#' @name cross_val
+#' @param n sample size
+#' @param kp number of parts
+#' @returns k-length list of indices for each part
+
+cross_val <- function(n, kp) {  
+   m <- floor(n/kp) # approximate size of each part
+   r <- n-m*kp  
+   i <- sample(n,n) # random reordering of the indices
+   ind<-list() # creating list of indices for all K parts
+   length(ind)<-kp
+   
+   for (k in 1:kp) {
+      if (k <= r) kpart <- ((m+1)*(k-1)+1):((m+1)*k)  
+      
+         else kpart<-((m+1)*r+m*(k-r-1)+1):((m+1)*r+m*(k-r))
+         
+      ind[[k]] <- i[kpart]  # indices for kth part of data
+   }
+   
+   ind
+   
+}
+```
+
+To show you another possible implementation, we're first using for loops (not ideal). Also, today we're doing two replicates of 3-fold cross validation (ideally you can do more replicates and at least 5-fold CV):
+
+```{r}
+set.seed(1)
+
+rep <- 2
+folds <- 3  
+models <- 6
+n <- nrow(news_train)
+y <- news_train$shares
+yhat <- matrix(0, n, models)
+mse <- matrix(0, rep, models)
+
+for (j in 1:rep) {
+  
+  ind <- cross_val(n,folds)
+  
+  for (k in 1:folds) {
+    
+     out <- nnet(shares~.,news_train[-ind[[k]],], linout=T, size=1, decay=10, maxit=1000, trace=F)
+     yhat[ind[[k]],1] < -as.numeric(predict(out,news_train[ind[[k]],]))
+     
+     out <- nnet(shares~.,news_train[-ind[[k]],], linout=T, size=1, decay=0.1, maxit=1000, trace=F)
+     yhat[ind[[k]],2] <- as.numeric(predict(out,news_train[ind[[k]],]))
+  
+     out <- nnet(shares~.,news_train[-ind[[k]],], linout=T, size=10, decay=10, maxit=1000, trace=F)
+     yhat[ind[[k]],1] <- as.numeric(predict(out,news_train[ind[[k]],]))
+     
+     out <- nnet(shares~.,news_train[-ind[[k]],], linout=T, size=10, decay=0.1, maxit=1000, trace=F)
+     yhat[ind[[k]],2] <- as.numeric(predict(out,news_train[ind[[k]],]))   
+     
+     out <- nnet(shares~.,news_train[-ind[[k]],], linout=T, size=10, decay=1000, maxit=1000, trace=F)
+     yhat[ind[[k]],1] <- as.numeric(predict(out,news_train[ind[[k]],]))
+     
+     out <- nnet(shares~.,news_train[-ind[[k]],], linout=T, size=10, decay=10, maxit=1000, trace=F)
+     yhat[ind[[k]],2] <- as.numeric(predict(out,news_train[ind[[k]],]))  
+  } 
+  
+  mse[j,] <- apply(yhat,2,function(x) sum((y-x)^2))/n
+  
+} 
+
+ave_mse <- apply(mse,2,mean)
+
+r2 <- 1-ave_mse/var(y)
+
+r2
+```
+
+Among these models, the "best" seems to be the one with 1 unit and decay 0.1.
+
+### Classification
+
+For classification, you'd need to switch `linout` in `nnet()` to `FALSE` (which is actually the default).
+
+## `Caret` implementation
+
+For loops are slow and force you to write more code to search over a space of tuning parameters. The implementation in `caret` helps with this:
+
+```{r, echo=TRUE}
+set.seed(1)
+
+folds <- createFolds(news_train$shares, k = 3, list = FALSE)
+
+training <- news_train[ folds,]
+
+testing  <- news_train[-folds,]
+
+train_control <- trainControl(method = "repeatedcv",
+                           number = 3,
+                           repeats = 2)
+
+nn <- train(shares ~ ., data = training, 
+            method = "nnet", 
+            trControl = train_control,
+            verbose = FALSE,
+            trace = FALSE,
+            tuneGrid = expand.grid(decay = c(0.1, 0.5, 1, 1.5), size = c(1, 5, 10, 15, 17)))
+```
+
+Let's check our tuning:
+
+```{r}
+trellis.par.set(caretTheme())
+ggplot(nn)  
+```
+
+We might be tempted to add more units, but they'd be too many for the data we have (there's actually an error message) and the test error is actually stabilizing--not changing meaningfully.
+
+It seems that the "best" single-layered neural network is the one with 17 units and decay parameter of 0.1
+
+# ALE plots
+
+Accumulated local effects plots are an alternative to partial dependence plots (you can read Daniel Apley's article about them, cited in the documentation of `ALEPlot`). You can also use partial dependence plots with `nnet`, though, if you prefer.
+
+```{r, echo=TRUE}
+nn_best <- nnet(shares~.,news_train, linout=T, size=17, decay=0.1, maxit=1000, trace=F)
+
+yhatf <- function(X.model, newdata) as.numeric(predict(X.model, newdata))
+
+invisible(ALEPlot(as.data.frame(news_train), nn_best, pred.fun=yhatf, J=7, K=50, NA.plot = TRUE))
+rug(pull(news_train))
+```
+
+I chose this predictor because it was selected as the most important by tree-based methods. Neural networks don't do variable selection. One way to get at this is doing several ALE plots (you can use a for loop) and seeing the range of the response over which predictors vary. The larger the range, the most important the predictor is.
+
+There are barely some non-linearities. Given this, it makes sense that linear methods perform best on these data--while they are less flexible (which doesn't seem to be needed), they are also less complex (and thus prone to overfitting).
+
+# Model validation
+
+A little helper function to get the $R^2$:
+
+```{r}
+# helper function
+#' @name r2
+#' @param model nnet object
+#' @param test test data
+#' @param outcome string with the response
+#' @returns test R2
+r2<- function(model, test, outcome){
+  
+  preds <- predict(model, test)
+  
+  sse <- sum((test[[outcome]] - preds)^2)
+  sst <- sum((test[[outcome]] - mean(test[[outcome]]))^2)
+  r2 <- 1 - sse / sst
+  
+  return(r2)
+  
+}
+```
+
+```{r}
+r2(nn_best, news_test, "shares")
+```
+
+Terrible! Makes sense given what we discussed yesterday and the ALE plot above.
+
+Remember the $R^2s$ from yesterday:
+
+| Model            | Test R2 |
+|------------------|---------|
+| Kitchen sink OLS | 0.28    |
+| Ridge            | 0.21    |
+| Lasso            | 0.25    |
+| Random forests   | 0.03    |
+| Boosted trees    | -0.06   |
+| Neural network   | -1.95   |
+
+Again, linear models perform best on these data. There's no need for more flexibility/complexity.

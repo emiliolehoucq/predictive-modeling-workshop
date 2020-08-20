@@ -17,15 +17,15 @@ knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message 
 
 # Question
 
-Fit boosted trees and random forests through a validation set approach to predict `order` in the clickstream data for online shopping Data Set. Which model fits the data best? Use a validation set approach.
+Fit boosted trees and random forests through a validation set approach to predict `order` in the clickstream data for online shopping Data Set. Which model fits the data best? Use a validation set approach. Also, visualize the importance of predictors for each model and the marginal relation between the most important predictor and the response for the random forest.
+
+# Answer
 
 ## Packages
 
 ```{r}
 library(tidyverse)
 library(janitor) # clean_names
-library(skimr) # descriptive statistics
-library(ggcorrplot) # correlation matrix
 library(ranger) # random forests
 library(vip) # variable importance plot
 library(pdp) # partial dependence plot
@@ -35,7 +35,7 @@ library(xgboost) # boosted trees
 ## Data
 
 ```{r}
-set.seed(1) # this is what we're going to use every time there is randomization
+set.seed(1)
 
 factors <- c("country", "page_1_main_category", "colour", 
              "location", "model_photography", "price_2", "page")
@@ -59,13 +59,6 @@ eshop_split <- tibble(train = eshop_tune %>% sample_frac(0.7) %>% list(),
                      test = eshop_tune %>% setdiff(train) %>% list())
 ```
 
-
-
-
-
-
-
-
 # Random forests
 
 Let's tune the number of variables to split at each node first through a validation set approach:
@@ -73,10 +66,10 @@ Let's tune the number of variables to split at each node first through a validat
 ```{r}
 set.seed(1)
 
-random_forest <- news_split %>% 
-  crossing(mtry = 1:(ncol(news) - 1)) %>% 
+random_forest <- eshop_split %>% 
+  crossing(mtry = 1:(ncol(eshop) - 1)) %>% 
   mutate(model = map2(.x = train, .y = mtry, 
-                      .f = function(x, y) ranger(shares ~ ., 
+                      .f = function(x, y) ranger(order ~ ., 
                                                  mtry = y, 
                                                  data = x, 
                                                  splitrule = "variance",
@@ -93,7 +86,7 @@ ggplot(random_forest) +
   labs(x = "mtry", y = "MSE")
 ```
 
-Yes, the OOB MSE decreases and then keeps increases. We've reached our minima.
+Yes, the OOB MSE is at a minimum and keeps increases.
 
 ```{r}
 random_forest %>% 
@@ -101,22 +94,18 @@ random_forest %>%
   pluck("mtry", 1)
 ```
 
-The "best" number of variables to split at each node is 3.
+The "best" number of variables to split at each node is 1.
 
 You can also tune the maximum depth of each tree (max.depth) and the number of trees (num.trees). We'll keep it to the number of variables to split at each node for speed, and since it's the one that tends to have a higher impact.
-
-## Classification
-
-For classification, you need to change `splitrule` to `gini`.
 
 ## Variable importance plot
 
 Let's do a variable importance plot.
 
 ```{r}
-random_forest_best <- ranger(shares ~ ., 
-                      data = news_tune, 
-                      mtry = 3,
+random_forest_best <- ranger(order ~ ., 
+                      data = eshop_tune, 
+                      mtry = 1,
                       importance = "impurity", 
                       splitrule = "variance")
 
@@ -131,15 +120,15 @@ Let's look at the marginal relation between particular predictors and the respon
 
 ```{r}
 partial(random_forest_best, 
-        pred.var = "num_hrefs",
-        pred.data = news_tune,
+        pred.var = "day",
+        pred.data = eshop_tune,
         plot = TRUE,
         rug = TRUE,
         plot.engine = "ggplot2") + 
-  labs(y = "Number of shares", x = "Number of links")
+  labs(y = "Order", x = "Day")
 ```
 
-There seems to be a non-linear relation, which would be harder to model with linear models. However, we clearly don't have much data for most of the range of the predictor and even where there's data there's not a lot. We run the risk of overfitting.
+There seems to be a non-linear relation, which would be harder to model with linear models. However, we don't have much data. We run the risk of overfitting.
 
 # Boosted trees
 
@@ -228,10 +217,10 @@ Again, we're tuning boosted trees through a validation set approach. Let's tune 
 ```{r}
 set.seed(1)
 
-boosted_tree <- news_split %>%
+boosted_tree <- eshop_split %>%
    crossing(learn_rate = 10^seq(-10, -0.1, length.out = 20)) %>% 
-   mutate(train_mat = map(train, xgb_matrix, outcome = "shares"), 
-          test_mat = map(test, xgb_matrix, outcome = "shares"),
+   mutate(train_mat = map(train, xgb_matrix, outcome = "order"), 
+          test_mat = map(test, xgb_matrix, outcome = "order"),
           xg_model = map2(.x = train_mat, .y = learn_rate, 
                           .f = function(x, y) xgb.train(params = list(eta = y,
                                                                       depth = 10, 
@@ -255,22 +244,22 @@ Yes, the test $R^2$ increases to 0 and then decreases further away from 0. This 
 ```{r}
 boosted_tree %>% 
   arrange(abs(unlist(xg_test_mse))) %>%
-  pluck("learn_rate", 1) # 0.0005938602
+  pluck("learn_rate", 1) 
 ```
 
-The "best" learning rate is 0.0005938602.
+The "best" learning rate is 0.001971228
 
 Let's also tune the number of trees fit. It's better to tune all parameters at the same time. This obviously requires more computational capacity. You can do it with map functions, but would need more time and computing power. Here we're taking a "greedy" approach to tuning.
 
 ```{r}
 set.seed(1)
 
-boosted_tree <- news_split %>%
-   crossing(num_trees = seq(from = 600, to = 900, by = 10)) %>% 
-   mutate(train_mat = map(train, xgb_matrix, outcome = "shares"), 
-          test_mat = map(test, xgb_matrix, outcome = "shares"),
+boosted_tree <- eshop_split %>%
+   crossing(num_trees = seq(from = 400, to = 700, by = 10)) %>% 
+   mutate(train_mat = map(train, xgb_matrix, outcome = "order"), 
+          test_mat = map(test, xgb_matrix, outcome = "order"),
           xg_model = map2(.x = train_mat, .y = num_trees, 
-                          .f = function(x, y) xgb.train(params = list(eta = 0.0005938602,
+                          .f = function(x, y) xgb.train(params = list(eta = 0.001971228,
                                                                       depth = 10, 
                                                                       objective = "reg:squarederror"), 
                                                         data = x, 
@@ -287,21 +276,17 @@ ggplot(boosted_tree) +
   labs(x = "Number of trees fit", y = "R2")
 ```
 
-Again, the test $R^2$ increases to 0 and then decreases further away from 0. This tells us again that we're overfitting our data and doing a worse job than predicting the mean.
+Again, the test $R^2$ increases to 0 and then decreases further away from 0. This again tells us we're overfitting our data and doing a worse job than predicting the mean.
 
 ```{r}
 boosted_tree %>% 
   arrange(abs(unlist(xg_test_mse))) %>%
-  pluck("num_trees", 1) # 770
+  pluck("num_trees", 1) # 600
 ```
 
-The "best" number of trees fit is 770.
+The "best" number of trees fit is 600.
 
 You can also tune `gamma`, `max_depth`, `min_child_weight`, and `colsample_bytree` as well. For speed--and because they usually have the largest impact, we'll only tune the learning rate and the number of trees fit.
-
-## Classification
-
-For classification, you have to change `objective` to `"multi:softmax"` and set `num_class` to the number of classes (e.g., if binary, then 2). You'd also have to change to `metric == "misclass"` in the `xg_error` function.
 
 ## Variable importance plot
 
@@ -314,10 +299,6 @@ boosted_tree_best <- boosted_tree %>%
 
 vip(boosted_tree_best)
 ```
-
-## Partial dependence plot
-
-You can't use `partial()` to create partial dependence plots for an object of class xgb.Booster. However, you can also fit boosted trees with the package `gbm` and create partial dependence plots with `plot.gbm()`.
 
 # Model validation
 
@@ -353,26 +334,26 @@ r2_ranger <- function(model, test, outcome){
 ```
 
 ```{r}
-random_forest_best_test <- ranger(shares ~ ., 
-                      data = news_tune, 
-                      mtry = 3,
+random_forest_best_test <- ranger(order ~ ., 
+                      data = eshop_tune, 
+                      mtry = 1,
                       importance = "impurity", 
                       splitrule = "variance")
 
-r2_ranger(random_forest_best_test, news_val, "shares")
+r2_ranger(random_forest_best_test, eshop_val, "order")
 ```
 
 ## Boosted tree
 
 ```{r}
-boosted_tree_best_test <- xgb.train(params = list(eta = 0.0005938602,
+boosted_tree_best_test <- xgb.train(params = list(eta = 0.001971228,
                         depth = 10, 
                         objective = "reg:squarederror"),
-          data = xgb_matrix(news_tune, "shares"), 
-          nrounds = 770,
+          data = xgb_matrix(eshop_tune, "order"), 
+          nrounds = 600,
           silent = TRUE)
 
-xg_error(boosted_tree_best_test, xgb_matrix(news_val, "shares"), metric = "r2")
+xg_error(boosted_tree_best_test, xgb_matrix(eshop_val, "order"), metric = "r2")
 ```
 
 Neither of them is performing great. We're definitely overfitting our data.
@@ -381,11 +362,10 @@ Remember the $R^2s$ from yesterday:
 
 | Model            | Test R2 |
 |------------------|---------|
-| Kitchen sink OLS | 0.28    |
-| Ridge            | 0.21    |
-| Lasso            | 0.25    |
+| Kitchen sink OLS | 0.17    |
+| Ridge            | 0.14    |
+| Lasso            | 0.13    |
 | Random forests   | 0.03    |
 | Boosted trees    | -0.06   |
 
 Linear models seem to perform best on these data. Keep in mind we're using very little data overall and taking even less advantage given our cross validation strategy. It'd be better to do k-fold cross validation. For instructional purposes (to cover both k-fold cross validation and the validation set approach) and for speed, we're using this strategy.
-
