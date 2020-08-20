@@ -19,7 +19,3 @@ We'll be using the [Online News Popularity Data Set](https://archive.ics.uci.edu
 ## Resources
 
 For a brief overview of different topics, you can check out [Towards Data Science](https://towardsdatascience.com/). I recommend [Introduction to Statistical Learning](http://faculty.marshall.usc.edu/gareth-james/ISL/). For a more detailed and technical coverage, [The Elements of Statistical Learning](https://web.stanford.edu/~hastie/ElemStatLearn/). Both of these books are free online.
-
-## Authorship
-
-The helper functions for the boosted trees are taken from Arend Kuyper's Data Science Manual.
