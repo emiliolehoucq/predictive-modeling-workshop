@@ -23,7 +23,6 @@ library(janitor) # clean_names
 library(robustHD) # standardize
 library(skimr) # descriptive statistics
 library(ggcorrplot) # correlation matrix
-library(caret) # cross validation
 library(glmnet) # shrinkage methods
 library(glmnetUtils) # improves glmnet
 ```
@@ -143,6 +142,10 @@ cbind(ridge_min$dev.ratio, ridge_1se$dev.ratio)
 
 Ridge regression does seem to improve over OLS.
 
+## Classification
+
+For classification, you need to set `family` to `"binomial"`. 
+
 # Lasso regression
 
 Again, we're using 10-fold cross validation.
@@ -183,6 +186,10 @@ cbind(lasso_min$dev.ratio, lasso_1se$dev.ratio)
 ```
 
 Lasso regression does seem to improve over both OLS and Ridge regressions.
+
+## Classification
+
+For classification, you need to set `family` to `"binomial"`. 
 
 # Model validation
 

@@ -29,7 +29,6 @@ library(janitor) # clean_names
 library(robustHD) # standardize
 library(skimr) # descriptive statistics
 library(ggcorrplot) # correlation matrix
-library(caret) # cross validation
 library(glmnet) # shrinkage methods
 library(glmnetUtils) # improves glmnet
 ```
