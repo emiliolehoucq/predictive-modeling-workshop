@@ -17,4 +17,4 @@ knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message 
 
 # Question
 
-Fit boosted trees and random forests through a validation set approach to predict `order` in the clickstream data for online shopping Data Set. Which model fits the data best? Use a validation set approach. Also, visualize the importance of predictors for each model and the marginal relation between the most important predictor and the response for the random forest.
+Fit boosted trees and random forests through a validation set approach to predict `order` in the [clickstream data for online shopping Data Set](https://archive.ics.uci.edu/ml/datasets/clickstream+data+for+online+shopping). Which model fits the data best? Use a validation set approach. Also, visualize the importance of predictors for each model and the marginal relation between the most important predictor and the response for the random forest.

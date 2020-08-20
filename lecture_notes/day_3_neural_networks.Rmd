@@ -17,6 +17,8 @@ knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message 
 
 # Packages
 
+These are the packages we're going to use throughout the session:
+
 ```{r}
 library(tidyverse)
 library(janitor) # clean_names
@@ -28,8 +30,12 @@ library(ALEPlot) # ALE plot
 
 # Data
 
+We're going to use the [Online News Popularity Data Set from the UCI Machine Learning] Repository(https://archive.ics.uci.edu/ml/datasets/Online+News+Popularity). The target is the number of shares (`shares`). Here I'm dealing with quick data wrangling to get the data ready for modeling.
+
+Keep in mind it's best to standardize your numerical predictors before fitting neural networks.
+
 ```{r}
-set.seed(1) # this is what we're going to use every time there is randomization
+set.seed(1)
 
 factors <- c("data_channel_is_lifestyle", "data_channel_is_entertainment", "data_channel_is_bus", 
              "data_channel_is_socmed", "data_channel_is_tech", "data_channel_is_world", 
@@ -46,7 +52,9 @@ news <- read_csv(here::here("data/OnlineNewsPopularity.csv")) %>%
 
 ```
 
-We're going to split the dataset into two for tuning and validation.
+In statistical learning/predictive modeling, you don't care about how your model performs in the data you have at hand, but how it would perform either in the population or in new data that comes your way. Of course, you don't have these data. Cross validation is a set of resampling methods to address this problem. It allows you to estimate your test error. It's important to not use the same set of data for model tuning and for model validation. There are three main types of cross validation: validation set approach, leave one out cross validation, and k-fold cross validation. K-fold cross validation (where usually k=10, 5 or 3, depending on data/computing power) is the ideal. Also, since cross validation involves randomization, it'll give different results across iterations. Ideally, you can do several and average across them.
+
+Today, we're going to use k-fold cross validation for model tuning and the validation set approach for model validation. Now, we're going to split the dataset into two for tuning and validation:
 
 ```{r}
 set.seed(1)
@@ -234,9 +242,9 @@ Remember the $R^2s$ from yesterday:
 
 | Model            | Test R2 |
 |------------------|---------|
-| Kitchen sink OLS | 0.28    |
-| Ridge            | 0.21    |
-| Lasso            | 0.25    |
+| Kitchen sink OLS | 0.11    |
+| Ridge            | 0.10    |
+| Lasso            | 0.10    |
 | Random forests   | 0.03    |
 | Boosted trees    | -0.06   |
 | Neural network   | -1.95   |

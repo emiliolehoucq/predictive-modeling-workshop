@@ -17,7 +17,7 @@ knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message 
 
 # Question
 
-Fit a single-layered neural network through 2 repeats of 3-fold cross validation to predict `order` in the clickstream data for online shopping Data Set. Which model fits the data best? Use a validation set approach. Also, visualize the marginal relation between `day` and the response with an ALE plot.
+Fit a single-layered neural network through 2 repeats of 3-fold cross validation to predict `order` in the [clickstream data for online shopping Data Set](https://archive.ics.uci.edu/ml/datasets/clickstream+data+for+online+shopping). Which model fits the data best? Use a validation set approach. Also, visualize the marginal relation between `day` and the response with an ALE plot.
 
 # Answer
 
@@ -48,8 +48,6 @@ eshop <- read_delim(here::here("data/e-shop clothing 2008.csv"), delim = ";") %>
   mutate_if(is.numeric, funs(standardize(.)))
 ```
 
-We're going to split the dataset into two for tuning and validation.
-
 ```{r}
 set.seed(1)
 
@@ -58,8 +56,6 @@ eshop_test <- eshop %>% setdiff(eshop_train)
 ```
 
 ## Single-layered neural network
-
-For loops are slow and force you to write more code to search over a space of tuning parameters. The implementation in `caret` helps with this:
 
 ```{r, echo=TRUE}
 set.seed(1)
@@ -82,20 +78,12 @@ nn <- train(order ~ ., data = training,
             tuneGrid = expand.grid(decay = c(0.1, 0.5, 1, 1.5), size = c(1, 5, 10, 15, 19)))
 ```
 
-Let's check our tuning:
-
 ```{r}
 trellis.par.set(caretTheme())
 ggplot(nn)  
 ```
 
-We might be tempted to add more units, but they'd be too many for the data we have (there's actually an error message) and the test error is actually stabilizing--not changing meaningfully.
-
-It seems that the "best" single-layered neural network is the one with 19 units and decay parameter of 0.1. To avoid overfitting, let's pick the one with 15 units, though.
-
 ## ALE plot
-
-Accumulated local effects plots are an alternative to partial dependence plots (you can read Daniel Apley's article about them, cited in the documentation of `ALEPlot`). You can also use partial dependence plots with `nnet`, though, if you prefer.
 
 ```{r, echo=TRUE}
 nn_best <- nnet(order~.,eshop_train, linout=T, size=15, decay=0.1, maxit=1000, trace=F)
@@ -106,13 +94,7 @@ invisible(ALEPlot(as.data.frame(eshop_train), nn_best, pred.fun=yhatf, J=2, K=50
 rug(pull(eshop_train))
 ```
 
-I chose this predictor because it was selected as the most important by tree-based methods. Neural networks don't do variable selection. One way to get at this is doing several ALE plots (you can use a for loop) and seeing the range of the response over which predictors vary. The larger the range, the most important the predictor is.
-
-While there are some non-linearities, probably a linear fit is okay. Given this, it makes sense that linear methods perform best on these data--while they are less flexible (which doesn't seem to be needed), they are also less complex (and thus prone to overfitting).
-
 ## Model validation
-
-A little helper function to get the $R^2$:
 
 ```{r}
 # helper function
@@ -138,17 +120,11 @@ r2<- function(model, test, outcome){
 r2(nn_best, eshop_test, "order")
 ```
 
-Terrible! Makes sense given what we discussed yesterday and the ALE plot above.
-
-Remember the $R^2s$ from yesterday:
-
 | Model            | Test R2 |
 |------------------|---------|
-| Kitchen sink OLS | 0.17    |
-| Ridge            | 0.14    |
-| Lasso            | 0.13    |
+| Kitchen sink OLS | 0.08    |
+| Ridge            | 0.08    |
+| Lasso            | 0.09    |
 | Random forests   | 0.03    |
 | Boosted trees    | -0.06   |
 | Neural network   | -0.97   |
-
-Again, linear models perform best on these data. There's no need for more flexibility/complexity.

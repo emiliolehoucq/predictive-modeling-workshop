@@ -17,4 +17,4 @@ knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message 
 
 # Question
 
-Fit a kitchen sink OLS model and tune Lasso and Ridge models through 10-fold cross validation to predict `order` in the clickstream data for online shopping Data Set. Which model fits the data best? Use a validation set approach.
+Fit a kitchen sink OLS model and tune Lasso and Ridge models through 10-fold cross validation to predict `order` in the [clickstream data for online shopping Data Set](https://archive.ics.uci.edu/ml/datasets/clickstream+data+for+online+shopping). Which model fits the data best? Use a validation set approach.

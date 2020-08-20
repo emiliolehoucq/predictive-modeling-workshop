@@ -17,7 +17,7 @@ knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message 
 
 # Question
 
-Fit a kitchen sink OLS model and tune Lasso and Ridge models through 10-fold cross validation to predict `order` in the clickstream data for online shopping Data Set. Which model fits the data best? Use a validation set approach.
+Fit a kitchen sink OLS model and tune Lasso and Ridge models through 10-fold cross validation to predict `order` in the [clickstream data for online shopping Data Set](https://archive.ics.uci.edu/ml/datasets/clickstream+data+for+online+shopping). Which model fits the data best? Use a validation set approach.
 
 # Answer
 
@@ -48,11 +48,10 @@ eshop <- read_delim(here::here("data/e-shop clothing 2008.csv"), delim = ";") %>
   mutate_each_(funs(factor(.)), factors) %>% 
   mutate(log_order = log(order)) %>% 
   select(-order) %>% 
-  mutate_if(is.numeric, funs(standardize(.)))
+  mutate_if(is.numeric, funs(standardize(.))) %>% 
+  select(-country) # otherwise there's problems with the test data. there are better ways to deal with this
 
 ```
-
-We're going to split the dataset into two for tuning and validation.
 
 ```{r}
 set.seed(1)
@@ -63,17 +62,9 @@ eshop_test <- eshop %>% setdiff(eshop_train)
 
 ## Exploratory data analysis
 
-Let's first take a look at some descriptives.
-
 ```{r}
 skim(eshop_train)
 ```
-
-Two noticeable things for us:
-- there are no missing values
-- our response (log_order) seems reasonably close to a Normal distribution
-
-We could do a correlation matrix.
 
 ```{r}
 corr <- round(cor(eshop_train %>% select_if(is.numeric)), 1)
@@ -81,13 +72,7 @@ corr <- round(cor(eshop_train %>% select_if(is.numeric)), 1)
 ggcorrplot(corr, lab = FALSE)
 ```
 
-Doesn't seem like there are super high correlations. Hopefully the factors can do a better job (you could do side-by-side boxplots).
-
-Of course, there are many other things you should do in an exploratory data analysis. We're just going to skip that here. We'll focus on the models and rely on them for variable selection.
-
 ## OLS regression
-
-Let's try a kitchen sink OLS. We'll compare the performance of our shrinkage models with it.
 
 ```{r}
 kitchen_sink <- lm(log_order ~ ., eshop_train)
@@ -95,18 +80,7 @@ kitchen_sink <- lm(log_order ~ ., eshop_train)
 summary(kitchen_sink)
 ```
 
-Well, we're not getting a lot of traction on our problem... Let's see if we can do better.
-
-What problems could this model have?
-- multicollinearity
-- variable selection
-- non-linearities
-
 ## Ridge regression
-
-We're going to use 10-fold cross validation to tune the model.
-
-Ideally, you could do several iterations of k-fold cross validation, since each will have different results, since it involves randomization.
 
 ```{r}
 set.seed(1)
@@ -121,13 +95,9 @@ ridge_cv <- cv.glmnet(formula = log_order ~ .,
     )
 ```
 
-Let's make sure we tuned the model correctly.
-
 ```{r}
 plot(ridge_cv)
 ```
-
-Two conventional options for the "best" model:
 
 ```{r}
 ridge_lambda_min <- ridge_cv$lambda.min
@@ -143,11 +113,7 @@ coef(ridge_min)
 cbind(ridge_min$dev.ratio, ridge_1se$dev.ratio)
 ```
 
-Ridge regression does seem to improve over OLS.
-
 ## Lasso regression
-
-Again, we're using 10-fold cross validation.
 
 ```{r}
 set.seed(1)
@@ -160,13 +126,9 @@ lasso_cv <- cv.glmnet(formula = log_order ~ .,
     )
 ```
 
-Let's make sure we tuned the model correctly.
-
 ```{r}
 plot(lasso_cv)
 ```
-
-Two conventional options for the "best" model:
 
 ```{r}
 lasso_lambda_min <- lasso_cv$lambda.min
@@ -178,40 +140,56 @@ lasso_1se <- glmnet(log_order ~ ., data = eshop_train, alpha = 1, lambda = lasso
 coef(lasso_min)
 ```
 
-It performs variable selection. That's useful.
-
 ```{r}
 cbind(lasso_min$dev.ratio, lasso_1se$dev.ratio)
 ```
 
-Lasso regression does not seem to improve over Ridge regression, but it does over OLS.
-
 ## Model validation
 
-Remember our test data? Time to use it.
+```{r}
+# helper function
+#' @name r2
+#' @param model nnet object
+#' @param test test data
+#' @param outcome string with the response
+#' @returns test R2
+r2<- function(model, test, outcome){
+  
+  preds <- predict(model, test)
+  
+  sse <- sum((test[[outcome]] - preds)^2)
+  sst <- sum((test[[outcome]] - mean(test[[outcome]]))^2)
+  r2 <- 1 - sse / sst
+  
+  return(r2)
+  
+}
+```
 
 ### OLS regression
 
 ```{r}
-kitchen_sink_test <- lm(log_order ~ ., eshop_test)
+kitchen_sink_test <- lm(log_order ~ ., eshop_train)
   
-summary(kitchen_sink_test)
+r2(kitchen_sink_test, eshop_test, "log_order")
 ```
 
 ### Ridge regression
 
 ```{r}
-ridge_min_test <- glmnet(log_order ~ ., data = eshop_test, alpha = 0, lambda = ridge_lambda_min)
-ridge_1se_test <- glmnet(log_order ~ ., data = eshop_test, alpha = 0, lambda = ridge_lambda_1se)
-cbind(ridge_min_test$dev.ratio, ridge_1se_test$dev.ratio)
+ridge_min_test <- glmnet(log_order ~ ., data = eshop_train, alpha = 0, lambda = ridge_lambda_min)
+ridge_1se_test <- glmnet(log_order ~ ., data = eshop_train, alpha = 0, lambda = ridge_lambda_1se)
+
+cbind(r2(ridge_min_test, eshop_test, "log_order"), r2(ridge_1se_test, eshop_test, "log_order"))
 ```
 
 ### Lasso regression
 
 ```{r}
-lasso_min_test <- glmnet(log_order ~ ., data = eshop_test, alpha = 1, lambda = lasso_lambda_min)
-lasso_1se_test <- glmnet(log_order ~ ., data = eshop_test, alpha = 1, lambda = lasso_lambda_1se)
-cbind(lasso_min_test$dev.ratio, lasso_1se_test$dev.ratio)
+lasso_min_test <- glmnet(log_order ~ ., data = eshop_train, alpha = 1, lambda = lasso_lambda_min)
+lasso_1se_test <- glmnet(log_order ~ ., data = eshop_train, alpha = 1, lambda = lasso_lambda_1se)
+
+cbind(r2(lasso_min_test, eshop_test, "log_order"), r2(lasso_1se_test, eshop_test, "log_order"))
 ```
 
-OLS regression is actually the one that performs best on the test data, followed by Ridge, and Lasso last.
+They all perform pretty much the same. Also, they all perform slightly worse on the test data.

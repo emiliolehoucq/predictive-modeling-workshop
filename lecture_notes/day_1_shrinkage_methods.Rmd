@@ -15,7 +15,11 @@ params:
 knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message = FALSE, warning = FALSE)
 ```
 
+This session will cover how to implement shrinkage methods, specifically Lasso and Ridge regression, in R. Shrinkage methods are useful when the relation between the predictors and the response is linear and there are lots of predictors. If there are few predictors, you can use OLS or logistic regression or other techniques for variable selection such as best subsets or stepwise selection. Shrinkage methods address the issue, avoid multicolinearity, and they are regularized to avoid overfitting.
+
 # Packages
+
+These are the packages we're going to use throughout the session:
 
 ```{r}
 library(tidyverse)
@@ -29,8 +33,12 @@ library(glmnetUtils) # improves glmnet
 
 # Data
 
+We're going to use the [Online News Popularity Data Set](https://archive.ics.uci.edu/ml/datasets/Online+News+Popularity) from the UCI Machine Learning Repository. The target is the number of shares (`shares`). Here I'm dealing with quick data wrangling to get the data ready for modeling.
+
+Keep in mind it's best to standardize your numerical predictors before fitting Lasso and Ridge models.
+
 ```{r}
-set.seed(1) # this is what we're going to use every time there is randomization
+set.seed(1) # to ensure replicability every time there's randomization
 
 factors <- c("data_channel_is_lifestyle", "data_channel_is_entertainment", "data_channel_is_bus", 
              "data_channel_is_socmed", "data_channel_is_tech", "data_channel_is_world", 
@@ -41,15 +49,19 @@ factors <- c("data_channel_is_lifestyle", "data_channel_is_entertainment", "data
 news <- read_csv(here::here("data/OnlineNewsPopularity.csv")) %>% 
   sample_n(., 1500) %>% # we're only going to use 1,500 observations to run models faster during the sessions
   clean_names() %>% # to have all column names lower case letters
-  select(-c(url, lda_00:lda_04)) %>% # we don't want this predictors
-  mutate_each_(funs(factor(.)), factors) %>% # converting to factors --check: sapply(news, class)
+  select(-c(url, lda_00:lda_04)) %>% # we don't want these predictors
+  mutate_each_(funs(factor(.)), factors) %>% # converting to factors
   mutate(log_shares = log(shares)) %>% # taking the log of our response
   select(-shares) %>%  # droping the original response
   mutate_if(is.numeric, funs(standardize(.))) # standardizing numeric variables
 
 ```
 
-We're going to split the dataset into two for tuning and validation.
+In statistical learning/predictive modeling, you don't care about how your model performs in the data you have at hand, but how it would perform either in the population or in new data that comes your way. Of course, you don't have these data. Cross validation is a set of resampling methods to address this problem. It allows you to estimate your test error. It's important to not use the same set of data for model tuning and for model validation. There are three main types of cross validation: validation set approach, leave one out cross validation, and k-fold cross validation. K-fold cross validation (where usually k=10, 5 or 3, depending on data/computing power) is the ideal. Also, since cross validation involves randomization, it'll give different results across iterations. Ideally, you can do several and average across them.
+
+We're going to cover the validation set approach and k-fold cross validation over these three days. 
+
+Today, we're going to use k-fold cross validation for model tuning and the validation set approach for model validation. Now, we're going to split the dataset into two for tuning and validation:
 
 ```{r}
 set.seed(1)
@@ -59,6 +71,8 @@ news_test <- news %>% setdiff(news_train)
 ```
 
 # Exploratory data analysis
+
+Before modeling, you should always conduct an exploratory data analysis. During these three days, we'll only do one today and it'll be very brief.
 
 Let's first take a look at some descriptives.
 
@@ -78,11 +92,13 @@ corr <- round(cor(news_train %>%select_if(is.numeric)), 1)
 ggcorrplot(corr, lab = FALSE)
 ```
 
-Ah! Not super useful. And we only havem 41 numeric predictors...
+Ah! Not super useful. And we only have 41 numeric predictors, which is not a lot in the context of statistical learning/predictive modeling.
 
-Of course, there are many other things you should do in an exploratory data analysis. We're just going to skip that here. We'll focus on the models and rely on them for variable selection.
+Of course, there are many other things you should do in an exploratory data analysis. We're going to skip that here for time purposes. We'll focus on the models.
 
 # OLS regression
+
+Don't jump into the "fancy model hype." Plain old vanilla OLS and logistic regressions get you very far, particularly when the relation between the predictors and the response is linear. You should always fit different models and compare their performance on the test set. 
 
 Let's try a kitchen sink OLS. We'll compare the performance of our shrinkage models with it.
 
@@ -94,16 +110,11 @@ summary(kitchen_sink)
 
 Well, we're not getting a lot of traction to decide on news articles' postings... Let's see if we can do better.
 
-What problems could this model have?
-- multicollinearity
-- variable selection
-- non-linearities
+This model could have issues of variable selection, multicollinearity, and non-linearities.
 
 # Ridge regression
 
-We're going to use 10-fold cross validation to tune the model.
-
-Ideally, you could do several iterations of k-fold cross validation, since each will have different results, since it involves randomization.
+Ridge regression penalizes the size of the coefficients such that it shrinks them toward zero, but without reaching zero. It doesn't perform variable selection, then.
 
 ```{r}
 set.seed(1)
@@ -124,7 +135,9 @@ Let's make sure we tuned the model correctly.
 plot(ridge_cv)
 ```
 
-Two conventional options for the "best" model:
+This looks good--the test error is decreasing, reaching a minima, and then increasing again.
+
+There are two conventional options for selecting the "best" model--selecting the regualization parameter to minimize the error or to have it one standard error above the minimum.
 
 ```{r}
 ridge_lambda_min <- ridge_cv$lambda.min
@@ -140,15 +153,15 @@ coef(ridge_min)
 cbind(ridge_min$dev.ratio, ridge_1se$dev.ratio)
 ```
 
-Ridge regression does seem to improve over OLS.
+For these data, Ridge regression does seem to improve over OLS.
 
 ## Classification
 
-For classification, you need to set `family` to `"binomial"`. 
+For classification, you need to set `family` to `"binomial"`. Otherwise, the code stays the same.
 
 # Lasso regression
 
-Again, we're using 10-fold cross validation.
+Lasso regression penalizes the size of the coefficients such that it shrinks them toward zero and some to zero. It performs variable selection, then.
 
 ```{r}
 set.seed(1)
@@ -167,6 +180,8 @@ Let's make sure we tuned the model correctly.
 plot(lasso_cv)
 ```
 
+Again, it looks good--we seem to have reached a minima.
+
 Two conventional options for the "best" model:
 
 ```{r}
@@ -179,7 +194,7 @@ lasso_1se <- glmnet(log_shares ~ ., data = news_train, alpha = 1, lambda = lasso
 coef(lasso_min)
 ```
 
-It performs variable selection. That's useful.
+You can see it performs variable selection. Some coefficients are shrunk to zero.
 
 ```{r}
 cbind(lasso_min$dev.ratio, lasso_1se$dev.ratio)
@@ -189,34 +204,58 @@ Lasso regression does seem to improve over both OLS and Ridge regressions.
 
 ## Classification
 
-For classification, you need to set `family` to `"binomial"`. 
+For classification, you need to set `family` to `"binomial"`. Otherwise the code stays the same. 
 
 # Model validation
 
-Remember our test data? Time to use it.
+Remember you have to validate your models on the test data, This is where you compare their performance and select the "best" one.
+
+A little helper function to get the $R^2$:
+
+```{r}
+# helper function
+#' @name r2
+#' @param model nnet object
+#' @param test test data
+#' @param outcome string with the response
+#' @returns test R2
+r2<- function(model, test, outcome){
+  
+  preds <- predict(model, test)
+  
+  sse <- sum((test[[outcome]] - preds)^2)
+  sst <- sum((test[[outcome]] - mean(test[[outcome]]))^2)
+  r2 <- 1 - sse / sst
+  
+  return(r2)
+  
+}
+```
 
 ## OLS regression
 
 ```{r}
-kitchen_sink_test <- lm(log_shares ~ ., news_test)
-  
-summary(kitchen_sink_test)
+kitchen_sink_test <- lm(log_shares ~ ., news_train)
+
+r2(kitchen_sink_test, news_test, "log_shares")
 ```
 
 ## Ridge regression
 
 ```{r}
-ridge_min_test <- glmnet(log_shares ~ ., data = news_test, alpha = 0, lambda = ridge_lambda_min)
-ridge_1se_test <- glmnet(log_shares ~ ., data = news_test, alpha = 0, lambda = ridge_lambda_1se)
-cbind(ridge_min_test$dev.ratio, ridge_1se_test$dev.ratio)
+ridge_min_test <- glmnet(log_shares ~ ., data = news_train, alpha = 0, lambda = ridge_lambda_min)
+ridge_1se_test <- glmnet(log_shares ~ ., data = news_train, alpha = 0, lambda = ridge_lambda_1se)
+
+cbind(r2(ridge_min_test, news_test, "log_shares"), r2(ridge_1se_test, news_test, "log_shares"))
 ```
 
 ## Lasso regression
 
 ```{r}
-lasso_min_test <- glmnet(log_shares ~ ., data = news_test, alpha = 1, lambda = lasso_lambda_min)
-lasso_1se_test <- glmnet(log_shares ~ ., data = news_test, alpha = 1, lambda = lasso_lambda_1se)
-cbind(lasso_min_test$dev.ratio, lasso_1se_test$dev.ratio)
+lasso_min_test <- glmnet(log_shares ~ ., data = news_train, alpha = 1, lambda = lasso_lambda_min)
+lasso_1se_test <- glmnet(log_shares ~ ., data = news_train, alpha = 1, lambda = lasso_lambda_1se)
+
+cbind(r2(ridge_min_test, news_test, "log_shares"), r2(ridge_1se_test, news_test, "log_shares"))
 ```
 
-OLS regression is actually the one that performs best on the test data, followed by Lasso, and Ridge last.
+They all perform pretty much the same. Also, they all perform noticeable worse on the test data--this is typically the case, because of overfitting.

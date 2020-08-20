@@ -17,4 +17,4 @@ knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message 
 
 # Question
 
-Fit a single-layered neural network through 2 repeats of 3-fold cross validation to predict `order` in the clickstream data for online shopping Data Set. Which model fits the data best? Use a validation set approach. Also, visualize the marginal relation between `day` and the response with an ALE plot.
+Fit a single-layered neural network through 2 repeats of 3-fold cross validation to predict `order` in the [clickstream data for online shopping Data Set](https://archive.ics.uci.edu/ml/datasets/clickstream+data+for+online+shopping). Which model fits the data best? Use a validation set approach. Also, visualize the marginal relation between `day` and the response with an ALE plot.
