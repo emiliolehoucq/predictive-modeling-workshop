@@ -10,10 +10,6 @@ I'll show how to implement the models for regression. However, the classificatio
 
 We'll also cover model tuning and validation--some days through a validation set approach and others through k-fold cross validation. We'll use various tools to implement it. To get the full set of skills (which you can also use with other models), you'd have to attend the three days.
 
-## Schedule
-
-[test](https://github.com/emiliolehoucq/predictive-modeling/blob/master/lecture_notes/day_1_shrinkage_methods)
-
 ## Software
 
 You'll need R and `tidyverse`, `janitor`, `robustHD`, `skimr`, `ggcorrplot`, `glmnet`, `glmnetUtils`, `ranger`, `vip`, `pdp`, `xgboost`, `nnet`, `caret`, `ALEPlot`.
