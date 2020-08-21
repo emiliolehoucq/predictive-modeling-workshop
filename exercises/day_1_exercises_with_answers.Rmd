@@ -49,7 +49,7 @@ eshop <- read_delim(here::here("data/e-shop clothing 2008.csv"), delim = ";") %>
   mutate(log_order = log(order)) %>% 
   select(-order) %>% 
   mutate_if(is.numeric, funs(standardize(.))) %>% 
-  select(-country) # otherwise there's problems with the test data. there are better ways to deal with this
+  select(-country) # otherwise there's problems with the test data
 
 ```
 
@@ -89,7 +89,7 @@ lambda_grid <- 10^seq(-2, 10, length = 200)
 
 ridge_cv <- cv.glmnet(formula = log_order ~ ., 
                       data = eshop_train, 
-                      alpha = 0, # Ridge!
+                      alpha = 0,
                       nfolds = 10,
                       lambda = lambda_grid
     )
@@ -120,7 +120,7 @@ set.seed(1)
 
 lasso_cv <- cv.glmnet(formula = log_order ~ ., 
                       data = eshop_train, 
-                      alpha = 1, # Lasso! 
+                      alpha = 1,
                       nfolds = 10,
                       lambda = lambda_grid
     )
@@ -149,7 +149,7 @@ cbind(lasso_min$dev.ratio, lasso_1se$dev.ratio)
 ```{r}
 # helper function
 #' @name r2
-#' @param model nnet object
+#' @param model model
 #' @param test test data
 #' @param outcome string with the response
 #' @returns test R2

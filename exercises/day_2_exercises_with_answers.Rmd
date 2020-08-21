@@ -25,11 +25,11 @@ Fit boosted trees and random forests through a validation set approach to predic
 
 ```{r}
 library(tidyverse)
-library(janitor) # clean_names
-library(ranger) # random forests
-library(vip) # variable importance plot
-library(pdp) # partial dependence plot
-library(xgboost) # boosted trees
+library(janitor)
+library(ranger)
+library(vip)
+library(pdp)
+library(xgboost)
 ```
 
 ## Data
@@ -113,21 +113,15 @@ partial(random_forest_best,
 # Boosted trees
 
 ```{r}
-# Adaopted from Arend Kuyper's Data Science Manual
+# Adapted from Arend Kuyper's Data Science Manual
+
 # helper function
 #' @name xgb_matrix
 #' @param dat tibble, dataset
 #' @param outcome string, indicates the outcome variable in the data
-#' @returns MSE of the model on the test set
+#' @returns xgb.Dmatrix object
 xgb_matrix <- function(dat, outcome){
 
-  # Sanitize input: check that dat is a tibble
-  if(!is_tibble(dat)){
-    
-    dat <- as_tibble(dat)
-    
-  }
-  
   # Sanitize input: check that data has factors, not characters
   dat_types <- dat %>% map_chr(class)
   
@@ -166,7 +160,7 @@ xgb_matrix <- function(dat, outcome){
 #' @param model xgb object, a fitted boosted model
 #' @param test_mat DMatrix, a test set
 #' @param metric string (either "r2" or "misclass"), indicates the error metric
-#' @returns MSE/misclass rate of the model on the test set
+#' @returns R2/misclass rate of the model on the test set
 xg_error <- function(model, test_mat, metric = "r2"){
   
   # Get predictions and actual values
@@ -246,7 +240,7 @@ ggplot(boosted_tree) +
 ```{r}
 boosted_tree %>% 
   arrange(abs(unlist(xg_test_mse))) %>%
-  pluck("num_trees", 1) # 600
+  pluck("num_trees", 1)
 ```
 
 ## Variable importance plot
@@ -265,18 +259,14 @@ vip(boosted_tree_best)
 
 ```{r}
 # Adjusted from Arend Kuyper's Data Science Manual
-# helper function to get misclass rate from a ranger object
+
+# helper function to get error from a ranger object
 #' @name r2_ranger
 #' @param model ranger object, a fitted random forest
 #' @param test tibble/resample object, a test set
 #' @param outcome string, indicates the outcome variable in the data
 #' @returns r2 of the model on the test set
 r2_ranger <- function(model, test, outcome){
-  
-  # Check if test is a tibble
-  if(!is_tibble(test)){
-    test <- test %>% as_tibble()
-  }
   
   # Make predictions
   preds <- predict(model, test)$predictions

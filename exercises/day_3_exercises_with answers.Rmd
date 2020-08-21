@@ -25,11 +25,11 @@ Fit a single-layered neural network through 2 repeats of 3-fold cross validation
 
 ```{r}
 library(tidyverse)
-library(janitor) # clean_names
-library(robustHD) # standardize
-library(nnet) # neural networks
-library(caret) # cross validation
-library(ALEPlot) # ALE plot
+library(janitor)
+library(robustHD)
+library(nnet)
+library(caret)
+library(ALEPlot)
 ```
 
 ## Data

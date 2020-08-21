@@ -15,6 +15,8 @@ params:
 knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message = FALSE, warning = FALSE)
 ```
 
+This session covers tree-based methods, specifically random forests and boosted trees. I'd also recommend you to take a look at Bayesian Additive Regression Trees. Decision trees recursively partition the predictor space and assign a constant in a terminal node. Trees have the advantage of performing variable selection. Random forests average across the predictions of trees grown on bootstrap samples of the dataset. Any single tree is constrained to be grown on a subset of predictors, which decorrelates the resulting trees and improves the accuracy of the final model. Boosted trees are grown sequentially on the same data. Each tree is grown using the residuals from the previous tree, which improves the fit.
+
 # Packages
 
 These are the packages we're going to use throughout the session:
@@ -30,7 +32,7 @@ library(xgboost) # boosted trees
 
 # Data
 
-We're going to use the [Online News Popularity Data Set from the UCI Machine Learning] Repository(https://archive.ics.uci.edu/ml/datasets/Online+News+Popularity). The target is the number of shares (`shares`). Here I'm dealing with quick data wrangling to get the data ready for modeling.
+We're going to use the [Online News Popularity Data Set](https://archive.ics.uci.edu/ml/datasets/Online+News+Popularity) from the UCI Machine Learning Repository. The target is the number of shares (`shares`). Here I'm dealing with quick data wrangling to get the data ready for modeling.
 
 ```{r}
 set.seed(1) 
@@ -99,15 +101,15 @@ random_forest %>%
 
 The "best" number of variables to split at each node is 3.
 
-You can also tune the maximum depth of each tree (max.depth) and the number of trees (num.trees). We'll keep it to the number of variables to split at each node for speed, and since it's the one that tends to have a higher impact.
+You can also tune the maximum depth of each tree (`max.depth`) and the number of trees (`num.trees`). We'll keep it to the number of variables to split at each node for speed, and since it's the one that tends to have a higher impact.
 
 ## Classification
 
-For classification, you need to change `splitrule` to `gini`.
+For classification, you need to change `splitrule` to `gini`. Otherwise the code stays the same.
 
 ## Variable importance plot
 
-Let's do a variable importance plot.
+Another nice feature of tree-based methods is that there is a natural measure of variable importance, which you can visualize through a variable importance plot. This is really useful to interpret the model.
 
 ```{r}
 random_forest_best <- ranger(shares ~ ., 
@@ -119,11 +121,11 @@ random_forest_best <- ranger(shares ~ .,
 vip(random_forest_best)
 ```
 
-This is really useful.
+In this case, the most important variable seems to be `num_hrefs`.
 
 ## Partial dependence plot
 
-Let's look at the marginal relation between particular predictors and the response.
+Interpreting a single tree, at least one with not many nodes, is very straighforward. Ensembles of trees are more black-boxed. However, you can graph the marginal relations between specific predictors and the response to visualize the model. Here, we'll do the partial dependence plot for `num_hrefs`.
 
 ```{r}
 partial(random_forest_best, 
@@ -139,23 +141,18 @@ There seems to be a non-linear relation, which would be harder to model with lin
 
 # Boosted trees
 
-First, we'll need helper functions (adapted from Arend Kuyper's Data Science Manual):
+Two helper functions to produce `xgb_matrix` and the test error:
 
 ```{r}
+# Adapted from Arend Kuyper's Data Science Manual
+
 # helper function
 #' @name xgb_matrix
 #' @param dat tibble, dataset
 #' @param outcome string, indicates the outcome variable in the data
-#' @returns MSE of the model on the test set
+#' @returns xgb.Dmatrix object
 xgb_matrix <- function(dat, outcome){
 
-  # Sanitize input: check that dat is a tibble
-  if(!is_tibble(dat)){
-    
-    dat <- as_tibble(dat)
-    
-  }
-  
   # Sanitize input: check that data has factors, not characters
   dat_types <- dat %>% map_chr(class)
   
@@ -194,7 +191,7 @@ xgb_matrix <- function(dat, outcome){
 #' @param model xgb object, a fitted boosted model
 #' @param test_mat DMatrix, a test set
 #' @param metric string (either "r2" or "misclass"), indicates the error metric
-#' @returns MSE/misclass rate of the model on the test set
+#' @returns R2/misclass rate of the model on the test set
 xg_error <- function(model, test_mat, metric = "r2"){
   
   # Get predictions and actual values
@@ -219,7 +216,7 @@ xg_error <- function(model, test_mat, metric = "r2"){
 }
 ```
 
-Again, we're tuning boosted trees through a validation set approach. Let's tune the learning rate:
+The first hyperparameter we're tuning is the learning rate:
 
 ```{r}
 set.seed(1)
@@ -251,12 +248,12 @@ Yes, the test $R^2$ increases to 0 and then decreases further away from 0. This 
 ```{r}
 boosted_tree %>% 
   arrange(abs(unlist(xg_test_mse))) %>%
-  pluck("learn_rate", 1) # 0.0005938602
+  pluck("learn_rate", 1)
 ```
 
 The "best" learning rate is 0.0005938602.
 
-Let's also tune the number of trees fit. It's better to tune all parameters at the same time. This obviously requires more computational capacity. You can do it with map functions, but would need more time and computing power. Here we're taking a "greedy" approach to tuning.
+Let's also tune the number of trees fit. It's better to tune all parameters at the same time. This obviously requires more computational capacity. You can do it with map functions (`pmap()` allows you to provide any number of arguments), but would need more time and computing power. Here we're taking a "greedy" approach to tuning.
 
 ```{r}
 set.seed(1)
@@ -288,20 +285,20 @@ Again, the test $R^2$ increases to 0 and then decreases further away from 0. Thi
 ```{r}
 boosted_tree %>% 
   arrange(abs(unlist(xg_test_mse))) %>%
-  pluck("num_trees", 1) # 770
+  pluck("num_trees", 1)
 ```
 
 The "best" number of trees fit is 770.
 
-You can also tune `gamma`, `max_depth`, `min_child_weight`, and `colsample_bytree` as well. For speed--and because they usually have the largest impact, we'll only tune the learning rate and the number of trees fit.
+You can also tune `gamma`, `max_depth`, `min_child_weight`, and `colsample_bytree` as well. For speed--and because they usually have the largest impact--, we'll only tune the learning rate and the number of trees fit.
 
 ## Classification
 
-For classification, you have to change `objective` to `"multi:softmax"` and set `num_class` to the number of classes (e.g., if binary, then 2). You'd also have to change to `metric == "misclass"` in the `xg_error` function.
+For classification, you have to change `objective` to `"multi:softmax"` and set `num_class` to the number of classes (if binary, 2). You'd also have to change to `metric == "misclass"` in the `xg_error` function. Otherwise the code stays the same.
 
 ## Variable importance plot
 
-We can also look at variable importance:
+We can also visualize variable importance for boosted trees:
 
 ```{r}
 boosted_tree_best <- boosted_tree %>% 
@@ -313,27 +310,24 @@ vip(boosted_tree_best)
 
 ## Partial dependence plot
 
-You can't use `partial()` to create partial dependence plots for an object of class xgb.Booster. However, you can also fit boosted trees with the package `gbm` and create partial dependence plots with `plot.gbm()`.
+You can't use `partial()` to create partial dependence plots for an object of class `xgb.Booster`. However, you can also fit boosted trees with the package `gbm` and create partial dependence plots with `plot.gbm()`.
 
 # Model validation
 
 ## Random forest
 
-Helper function (adjusted from Arend Kuyper's Data Science Manual):
+Helper function to calculate the $R^2$:
 
 ```{r}
-# helper function to get misclass rate from a ranger object
+# Adjusted from Arend Kuyper's Data Science Manual
+
+# helper function to get error from a ranger object
 #' @name r2_ranger
 #' @param model ranger object, a fitted random forest
 #' @param test tibble/resample object, a test set
 #' @param outcome string, indicates the outcome variable in the data
 #' @returns r2 of the model on the test set
 r2_ranger <- function(model, test, outcome){
-  
-  # Check if test is a tibble
-  if(!is_tibble(test)){
-    test <- test %>% as_tibble()
-  }
   
   # Make predictions
   preds <- predict(model, test)$predictions
@@ -383,4 +377,4 @@ Remember the $R^2s$ from yesterday:
 | Random forests   | 0.03    |
 | Boosted trees    | -0.06   |
 
-Linear models seem to perform best on these data. Keep in mind we're using very little data overall and taking even less advantage given our cross validation strategy. It'd be better to do k-fold cross validation. For instructional purposes (to cover both k-fold cross validation and the validation set approach) and for speed, we're using this strategy.
+Linear models seem to perform best on these data. Keep in mind we're using very little data overall and taking even less advantage given our cross validation strategy. 

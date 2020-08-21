@@ -215,7 +215,7 @@ A little helper function to get the $R^2$:
 ```{r}
 # helper function
 #' @name r2
-#' @param model nnet object
+#' @param model model
 #' @param test test data
 #' @param outcome string with the response
 #' @returns test R2

@@ -15,6 +15,10 @@ params:
 knitr::opts_chunk$set(echo = TRUE, fig.height = 4.35, fig.width = 4.75, message = FALSE, warning = FALSE)
 ```
 
+Inspired by neurons in the brain, neural networks map predictors to an output through a series of hidden layers composed of nodes that can be differently activated. Today we'll cover how to implement single-layered neural networks--networks with only one hidden layer. The hyperparameters we can tune are the number of nodes and the weight decay. Single-layered neural networks are useful for problems with low signal to noise ratio (which is the case in analytics problems--think about all the noise in the data we're using!). For problems with more complex signals (e.g., in computer vision), more layers are needed. 
+
+`nnet` only allows for one hidden layer. If you're interested in neural networks with more hidden layers, I recommend Chollet, F. & Allaire, J.J. *Deep Learning with R*, which teaches you the methods and how to implement them with `keras`.
+
 # Packages
 
 These are the packages we're going to use throughout the session:
@@ -30,7 +34,7 @@ library(ALEPlot) # ALE plot
 
 # Data
 
-We're going to use the [Online News Popularity Data Set from the UCI Machine Learning] Repository(https://archive.ics.uci.edu/ml/datasets/Online+News+Popularity). The target is the number of shares (`shares`). Here I'm dealing with quick data wrangling to get the data ready for modeling.
+We're going to use the [Online News Popularity Data Set](https://archive.ics.uci.edu/ml/datasets/Online+News+Popularity) from the UCI Machine Learning Repository. The target is the number of shares (`shares`). Here I'm dealing with quick data wrangling to get the data ready for modeling.
 
 Keep in mind it's best to standardize your numerical predictors before fitting neural networks.
 
@@ -44,11 +48,11 @@ factors <- c("data_channel_is_lifestyle", "data_channel_is_entertainment", "data
              "weekday_is_sunday", "is_weekend") # all factors in the dataset
 
 news <- read_csv(here::here("data/OnlineNewsPopularity.csv")) %>% 
-  sample_n(., 1500) %>% # we're only going to use 1,500 observations to run models faster during the sessions
-  clean_names() %>% # to have all column names lower case letters
-  select(-c(url, lda_00:lda_04)) %>% # we don't want this predictors
-  mutate_each_(funs(factor(.)), factors) %>% # converting to factors --check: sapply(news, class)
-  mutate_if(is.numeric, funs(standardize(.))) # standardizing numeric variables
+  sample_n(., 1500) %>% 
+  clean_names() %>% 
+  select(-c(url, lda_00:lda_04)) %>% 
+  mutate_each_(funs(factor(.)), factors) %>% 
+  mutate_if(is.numeric, funs(standardize(.)))
 
 ```
 
@@ -63,17 +67,19 @@ news_train <- news %>% sample_frac(0.7)
 news_test <- news %>% setdiff(news_train)
 ```
 
-# Neural networks with more than one hidden layer
-
-Single-layered neural networks are useful for problems with low signal to noise ratio (which is the case in analytics problems--think about all the noise in the data we're using!). For problems with more complex signals (e.g., computer vision), more layers are needed. This session is focused on single-layered neural networks. `nnet` only allows for one hidden layer. If you're interested in neural networks with more hidden layers, I recommend Chollet, F. & Allaire, J.J. *Deep Learning with R*, which teaches you the methods and how to implement them with `keras`.
-
 # Single-layered neural networks
+
+Throughout these three days, in addition to the models themselves, we have covered different forms of cross validation and different implementations in R. Particularly, yesterday we covered `map` functions. Today we'll see two other implementations: for loops and `caret`. These tools are useful in statistical learning/predictive modeling beyond the specific models we're covering. In both cases today we'll use 2 replicates of 3-fold cross validation (ideally you can do 5 or 10 folds and more replicates).
 
 ## For loops implementation
 
-First, a helper function (adapted from Daniel Apley):
+I like for loops because they are very clear/readable (though they can get messy). However, they can be slow.
+
+First, a helper function to create indices for cross validation:
 
 ```{r}
+# Adapted from Daniel Apley:
+
 # helper function
 #' @name cross_val
 #' @param n sample size
@@ -99,8 +105,6 @@ cross_val <- function(n, kp) {
    
 }
 ```
-
-To show you another possible implementation, we're first using for loops (not ideal). Also, today we're doing two replicates of 3-fold cross validation (ideally you can do more replicates and at least 5-fold CV):
 
 ```{r}
 set.seed(1)
@@ -153,7 +157,7 @@ Among these models, the "best" seems to be the one with 1 unit and decay 0.1.
 
 ### Classification
 
-For classification, you'd need to switch `linout` in `nnet()` to `FALSE` (which is actually the default).
+For classification, you'd need to switch `linout` in `nnet()` to `FALSE` (which is actually the default). Otherwise the code stays the same.
 
 ## `Caret` implementation
 
@@ -195,6 +199,10 @@ It seems that the "best" single-layered neural network is the one with 17 units 
 
 Accumulated local effects plots are an alternative to partial dependence plots (you can read Daniel Apley's article about them, cited in the documentation of `ALEPlot`). You can also use partial dependence plots with `nnet`, though, if you prefer.
 
+Let's do the plot for `num_hrefs`, which was selected as the most important predictor by tree-based methods. 
+
+Neural networks don't do variable selection. One way to get at this is doing several ALE plots (you can use a for loop) and seeing the range of the response over which predictors vary. The larger the range, the most important the predictor is.
+
 ```{r, echo=TRUE}
 nn_best <- nnet(shares~.,news_train, linout=T, size=17, decay=0.1, maxit=1000, trace=F)
 
@@ -203,8 +211,6 @@ yhatf <- function(X.model, newdata) as.numeric(predict(X.model, newdata))
 invisible(ALEPlot(as.data.frame(news_train), nn_best, pred.fun=yhatf, J=7, K=50, NA.plot = TRUE))
 rug(pull(news_train))
 ```
-
-I chose this predictor because it was selected as the most important by tree-based methods. Neural networks don't do variable selection. One way to get at this is doing several ALE plots (you can use a for loop) and seeing the range of the response over which predictors vary. The larger the range, the most important the predictor is.
 
 There are barely some non-linearities. Given this, it makes sense that linear methods perform best on these data--while they are less flexible (which doesn't seem to be needed), they are also less complex (and thus prone to overfitting).
 
