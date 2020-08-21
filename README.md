@@ -12,7 +12,7 @@ We'll also cover model tuning and validation--some days through a validation set
 
 ## Schedule
 
-[test](https://github.com/emiliolehoucq/predictive-modeling/blob/master/lecture_notes/day_1_shrinkage_methods.html)
+[test](https://github.com/emiliolehoucq/predictive-modeling/blob/master/lecture_notes/day_1_shrinkage_methods)
 
 ## Software
 
