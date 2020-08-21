@@ -1,5 +1,7 @@
 # Statistical Learning (Predictive Modeling) in R
 
+## Overview
+
 Over the course of three days, we'll be covering some common models in statistical learning/predictive modeling: shrinkage methods (Lasso and Ridge regression), tree-based methods (boosted trees and random forests), and single-layered neural networks. 
 
 We'll focus on how to implement the models in R, rather than the methods themselves. I assume you know the models.
@@ -7,6 +9,10 @@ We'll focus on how to implement the models in R, rather than the methods themsel
 I'll show how to implement the models for regression. However, the classification version is easy to change and I included notes on how to do it.
 
 We'll also cover model tuning and validation--some days through a validation set approach and others through k-fold cross validation. We'll use various tools to implement it. To get the full set of skills (which you can also use with other models), you'd have to attend the three days.
+
+## Schedule
+
+[test](https://github.com/emiliolehoucq/predictive-modeling/blob/master/lecture_notes/day_1_shrinkage_methods.html)
 
 ## Software
 
