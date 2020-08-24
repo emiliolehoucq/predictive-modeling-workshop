@@ -14,6 +14,8 @@ We'll also cover model tuning and validation--some days through a validation set
 
 You'll need R and `tidyverse`, `janitor`, `robustHD`, `skimr`, `ggcorrplot`, `glmnet`, `glmnetUtils`, `ranger`, `vip`, `pdp`, `xgboost`, `nnet`, `caret`, `ALEPlot`.
 
+I'm using version 4.0.2 of R and the last version of all packages.
+
 There are other implementations of some of the models we'll cover in R. I included another package for boosted trees and another for neural networks in the notes.
 
 ## Data
