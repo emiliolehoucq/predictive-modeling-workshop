@@ -60,8 +60,11 @@ set.seed(1)
 news_tune <- news %>% sample_frac(0.7)
 news_val <- news %>%  setdiff(news_tune)
 
-news_split <- tibble(train = news_tune %>% sample_frac(0.7) %>% list(),
-                     test = news_tune %>% setdiff(train) %>% list())
+train <- news_tune %>% sample_frac(0.7)
+test <- news_tune %>% setdiff(train)
+
+news_split <- tibble(train = train %>% list(),
+                     test = test %>% list())
 ```
 
 # Random forests

@@ -53,8 +53,11 @@ set.seed(1)
 eshop_tune <- eshop %>% sample_frac(0.7)
 eshop_val <- eshop %>%  setdiff(eshop_tune)
 
-eshop_split <- tibble(train = eshop_tune %>% sample_frac(0.7) %>% list(),
-                     test = eshop_tune %>% setdiff(train) %>% list())
+train <- eshop_tune %>% sample_frac(0.7)
+test <- eshop_tune %>% setdiff(train)
+
+eshop_split <- tibble(train = train %>% list(),
+                     test = test %>% list())
 ```
 
 # Random forests
