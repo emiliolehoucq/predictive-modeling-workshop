@@ -52,7 +52,7 @@ news <- read_csv(here::here("data/OnlineNewsPopularity.csv")) %>%
   clean_names() %>% 
   select(-c(url, lda_00:lda_04)) %>% 
   mutate_each_(funs(factor(.)), factors) %>% 
-  mutate(log_shares = log(shares)) %>% # I tried with shares and they performed worse. Might be worth trying with tree-based methods
+  mutate(log_shares = log(shares)) %>% # I tried with shares and they performed worse
   select(-shares) %>%  
   mutate_if(is.numeric, funs(standardize(.)))
 
@@ -122,7 +122,7 @@ tun_par <- crossing(size = c(1, 2, 3, 4, 5), decay = c(1, 10, 100, 1000))
 yhat <- matrix(0, n, nrow(tun_par))
 r2 <- matrix(0, nrep, nrow(tun_par))
 
-for (h in 1:nrep) {
+for (h in 1:nrow(tun_par)) {
   
   for (j in 1:nrep) {
     
@@ -130,9 +130,9 @@ for (h in 1:nrep) {
   
   for (k in 1:nfolds) {
     
-     model <-nnet(log_shares ~ .,news_train[-ind[[k]],], linout=F, skip=F, size = tun_par$size[h], decay = tun_par$decay[h], maxit=1000, trace=F)
+     model <- nnet(log_shares ~ .,news_train[-ind[[k]],], linout=T, size = tun_par$size[h], decay = tun_par$decay[h], maxit=1000, trace=F)
      
-     yhat[ind[[k]],h] <- predict(model,news_train[ind[[k]],])
+     yhat[ind[[k]], h] <- predict(model, news_train[ind[[k]],])
      
   } 
   
@@ -142,9 +142,9 @@ for (h in 1:nrep) {
   
 }
 
-r2_ave<- apply(r2,2,mean) 
+r2_ave <- apply(r2,2,mean) 
 
-r2_ave
+r2_ave[which.max(r2_ave)]
 ```
 
 Among these models, the "best" seems to be the one with 1 unit and decay 1.
@@ -162,8 +162,7 @@ set.seed(1)
 
 train_control <- trainControl(method = "repeatedcv", number = 3, repeats = 2)
 
-nn <- train(log_shares ~ ., data = news_train, method = "nnet", trControl = train_control, verbose = FALSE, trace = FALSE,
-            tuneGrid = expand.grid(decay = c(1, 10, 100, 1000), size = c(1, 2, 3, 4, 5)))
+nn <- train(log_shares ~ ., data = news_train, method = "nnet", linout = T, trControl = train_control, verbose = FALSE, trace = FALSE, tuneGrid = expand.grid(decay = c(1, 10, 100, 1000), size = c(1, 2, 3, 4, 5)))
 
 print(nn)
 ```
@@ -175,7 +174,26 @@ trellis.par.set(caretTheme())
 ggplot(nn, metric = "Rsquared")  
 ```
 
-In this case, the "best" model seems to be the one with decay 1 and 5 hidden nodes.
+In this case, the "best" model seems to be the one with decay 10 and 1 hidden nodes.
+
+Let's explore a larger space of tuning parameters:
+
+```{r, echo=TRUE}
+set.seed(1)
+
+train_control <- trainControl(method = "repeatedcv", number = 3, repeats = 2)
+
+nn <- train(log_shares ~ ., data = news_train, method = "nnet", linout = T, trControl = train_control, verbose = FALSE, trace = FALSE, tuneGrid = expand.grid(decay = c(1:20), size = c(1:5)))
+
+print(nn)
+```
+
+Let's check our tuning:
+
+```{r}
+trellis.par.set(caretTheme())
+ggplot(nn, metric = "Rsquared")  
+```
 
 # ALE plots
 
@@ -195,13 +213,13 @@ rug(pull(news_train))
 ```
 
 ```{r, echo=TRUE}
-nn_best_caret <- nnet(log_shares~.,news_train, linout=T, size=5, decay=1, maxit=1000, trace=F)
+nn_best_caret <- nnet(log_shares~.,news_train, linout=T, size=4, decay=9, maxit=1000, trace=F)
 
 invisible(ALEPlot(as.data.frame(news_train), nn_best_caret, pred.fun=yhatf, J=7, K=50, NA.plot = TRUE))
 rug(pull(news_train))
 ```
 
-There are barely non-linearities. Given this, it makes sense that linear methods perform best on these data--while they are less flexible (which doesn't seem to be needed), they are also less complex (and thus prone to overfitting).
+There are barely non-linearities. Neural networks can flexibly model linear relations. This is an advantage over tree-based methods.
 
 # Model validation
 
@@ -235,8 +253,6 @@ r2(nn_best_for, news_test, "log_shares")
 r2(nn_best_caret, news_test, "log_shares")
 ```
 
-Neural networks can flexibly model linear relations, but also easily overfit the data.
-
 Remember the $R^2s$ from yesterday:
 
 | Model            | Test R2 |
@@ -246,6 +262,6 @@ Remember the $R^2s$ from yesterday:
 | Lasso            | 0.10    |
 | Random forests   | 0.03    |
 | Boosted trees    | -0.05   |
-| Neural network   | 0.10    |
+| Neural network   | 0.12    |
 
 Linear models have an advantage of interpretability here.
