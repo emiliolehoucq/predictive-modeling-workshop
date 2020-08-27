@@ -45,6 +45,8 @@ eshop <- read_delim(here::here("data/e-shop clothing 2008.csv"), delim = ";") %>
   clean_names() %>% 
   select(-c(`session_id`, `page_2_clothing_model`, year)) %>% 
   mutate_each_(funs(factor(.)), factors) %>% 
+  mutate(log_order = log(order)) %>%
+  select(-order) %>% 
   mutate_if(is.numeric, funs(standardize(.)))
 ```
 
@@ -60,37 +62,34 @@ eshop_test <- eshop %>% setdiff(eshop_train)
 ```{r, echo=TRUE}
 set.seed(1)
 
-folds <- createFolds(eshop_train$order, k = 3, list = FALSE)
+train_control <- trainControl(method = "repeatedcv", number = 3, repeats = 2)
 
-training <- eshop_train[ folds,]
+nn <- train(log_order ~ ., data = eshop_train, method = "nnet", trControl = train_control, verbose = FALSE, trace = FALSE,
+            tuneGrid = expand.grid(decay = c(1, 10, 100, 1000), size = c(1, 2, 3, 4, 5)))
 
-testing  <- eshop_train[-folds,]
-
-train_control <- trainControl(method = "repeatedcv",
-                           number = 3,
-                           repeats = 2)
-
-nn <- train(order ~ ., data = training, 
-            method = "nnet", 
-            trControl = train_control,
-            verbose = FALSE,
-            trace = FALSE,
-            tuneGrid = expand.grid(decay = c(0.1, 0.5, 1, 1.5), size = c(1, 5, 10, 15, 19)))
+print(nn)
 ```
 
 ```{r}
 trellis.par.set(caretTheme())
-ggplot(nn)  
+ggplot(nn, metric = "Rsquared")  
 ```
 
 ## ALE plot
 
 ```{r, echo=TRUE}
-nn_best <- nnet(order~.,eshop_train, linout=T, size=15, decay=0.1, maxit=1000, trace=F)
+nn_best1 <- nnet(log_order~.,eshop_train, linout=T, size=1, decay=1, maxit=1000, trace=F)
 
 yhatf <- function(X.model, newdata) as.numeric(predict(X.model, newdata))
 
-invisible(ALEPlot(as.data.frame(eshop_train), nn_best, pred.fun=yhatf, J=2, K=50, NA.plot = TRUE))
+invisible(ALEPlot(as.data.frame(eshop_train), nn_best1, pred.fun=yhatf, J=2, K=50, NA.plot = TRUE))
+rug(pull(eshop_train))
+```
+
+```{r, echo=TRUE}
+nn_best2 <- nnet(log_order~.,eshop_train, linout=T, size=3, decay=1, maxit=1000, trace=F)
+
+invisible(ALEPlot(as.data.frame(eshop_train), nn_best2, pred.fun=yhatf, J=2, K=50, NA.plot = TRUE))
 rug(pull(eshop_train))
 ```
 
@@ -117,7 +116,11 @@ r2<- function(model, test, outcome){
 ```
 
 ```{r}
-r2(nn_best, eshop_test, "order")
+r2(nn_best1, eshop_test, "log_order")
+```
+
+```{r}
+r2(nn_best2, eshop_test, "log_order")
 ```
 
 | Model            | Test R2 |
@@ -126,5 +129,5 @@ r2(nn_best, eshop_test, "order")
 | Ridge            | 0.08    |
 | Lasso            | 0.09    |
 | Random forests   | 0.03    |
-| Boosted trees    | -0.06   |
-| Neural network   | -0.97   |
+| Boosted trees    | 0.01    |
+| Neural network   | 0.09    |
